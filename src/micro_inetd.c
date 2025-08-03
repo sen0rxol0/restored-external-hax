@@ -53,21 +53,20 @@ static void child_handler( int sig );
 
 static char* argv0;
 
-
 int
 main2( int argc, char* argv[] )
-    {
+{
     unsigned short port;
     char** child_argv;
     int listen_fd, conn_fd;
     struct sockaddr_in sa_in;
     socklen_t sz;
 
-    argv0 = argv[0];
-
     /* Get arguments. */
     if ( argc < 3 )
-	usage();
+        usage();
+
+    argv0 = argv[0];
     port = (unsigned short) atoi( argv[1] );
     child_argv = argv + 2;
 
@@ -84,55 +83,58 @@ main2( int argc, char* argv[] )
     (void) signal( SIGCHLD, child_handler );
 
     for (;;)
-	{
-	/* Accept a new connection. */
-	sz = sizeof(sa_in);
-	conn_fd = accept( listen_fd, (struct sockaddr*) &sa_in, &sz );
-	if ( conn_fd < 0 )
-	    {
-	    if ( errno == EINTR )	/* because of SIGCHLD (or ptrace) */
-		continue;
-	    perror( "accept" );
-	    exit( 1 );
-	    }
+    {
+      	/* Accept a new connection. */
+      	sz = sizeof(sa_in);
+      	conn_fd = accept( listen_fd, (struct sockaddr*) &sa_in, &sz );
 
-	/* Fork a sub-process. */
-	if ( fork() == 0 )
-	    {
-	    /* Close standard descriptors and the listen socket. */
-	    (void) close( 0 );
-	    (void) close( 1 );
-	    (void) close( 2 );
-	    (void) close( listen_fd );
-	    /* Dup the connection onto the standard descriptors. */
-	    (void) dup2( conn_fd, 0 );
-	    (void) dup2( conn_fd, 1 );
-	    (void) dup2( conn_fd, 2 );
-	    (void) close( conn_fd );
-	    /* Run the program. */
-	    (void) execv( child_argv[0], child_argv );
-	    /* Something went wrong. */
-	    perror( "execl" );
-	    exit( 1 );
-	    }
-	/* Parent process. */
-	(void) close( conn_fd );
-	}
+        if ( conn_fd < 0 )
+      	{
 
-    }
+            if ( errno == EINTR )	/* because of SIGCHLD (or ptrace) */
+        		  continue;
+
+            perror( "accept" );
+            exit( 1 );
+        }
+
+        /* Fork a sub-process. */
+        if ( fork() == 0 )
+        {
+            /* Close standard descriptors and the listen socket. */
+            (void) close( 0 );
+            (void) close( 1 );
+            (void) close( 2 );
+            (void) close( listen_fd );
+            /* Dup the connection onto the standard descriptors. */
+            (void) dup2( conn_fd, 0 );
+            (void) dup2( conn_fd, 1 );
+            (void) dup2( conn_fd, 2 );
+            (void) close( conn_fd );
+            /* Run the program. */
+            (void) execv( child_argv[0], child_argv );
+            /* Something went wrong. */
+            perror( "execl" );
+            exit( 1 );
+         }
+
+         /* Parent process. */
+         (void) close( conn_fd );
+     }
+}
 
 
 static void
 usage( void )
-    {
-    (void) fprintf( stderr, "usage:  %s port program [args...]\n", argv0 );
-    exit( 1 );
-    }
+{
+  (void) fprintf( stderr, "usage:  %s port program [args...]\n", argv0 );
+  exit( 1 );
+}
 
 
 static void
 child_handler( int sig )
-    {
+{
     pid_t pid;
     int status;
 
@@ -143,30 +145,35 @@ child_handler( int sig )
 
     /* Reap defunct children until there aren't any more. */
     for (;;)
-        {
+    {
         pid = waitpid( (pid_t) -1, &status, WNOHANG );
+
         if ( (int) pid == 0 )           /* none left */
             break;
+
         if ( (int) pid < 0 )
-            {
+        {
+
             if ( errno == EINTR )       /* because of ptrace */
                 continue;
+
             /* ECHILD shouldn't happen with the WNOHANG option, but with
             ** some kernels it does anyway.  Ignore it.
             */
             if ( errno != ECHILD )
                 perror( "waitpid" );
             break;
-            }
         }
     }
+}
 
 
 static int
 initialize_listen_socket( int pf, int af, unsigned short port )
-    {
+{
     int listen_fd;
     int on;
+
 #ifdef USE_IPV6
     struct sockaddr_in6 sa_in;
 #else /* USE_IPV6 */
@@ -176,22 +183,22 @@ initialize_listen_socket( int pf, int af, unsigned short port )
     /* Create socket. */
     listen_fd = socket( pf, SOCK_STREAM, 0 );
     if ( listen_fd < 0 )
-        {
-	perror( "socket" );
+    {
+        perror( "socket" );
         exit( 1 );
-        }
+    }
 
     /* Allow reuse of local addresses. */
     on = 1;
-    if ( setsockopt(
-             listen_fd, SOL_SOCKET, SO_REUSEADDR, (char*) &on, sizeof(on) ) < 0 )
-	{
-	perror( "setsockopt SO_REUSEADDR" );
-	exit( 1 );
-	}
+    if (setsockopt(listen_fd, SOL_SOCKET, SO_REUSEADDR, (char*) &on, sizeof(on) ) < 0 )
+  	{
+      	perror( "setsockopt SO_REUSEADDR" );
+      	exit( 1 );
+  	}
 
     /* Set up the sockaddr. */
     (void) memset( (char*) &sa_in, 0, sizeof(sa_in) );
+
 #ifdef USE_IPV6
     sa_in.sin6_family = af;
     sa_in.sin6_addr = in6addr_any;
@@ -203,18 +210,18 @@ initialize_listen_socket( int pf, int af, unsigned short port )
 #endif /* USE_IPV6 */
 
     /* Bind it to the socket. */
-    if ( bind( listen_fd, (struct sockaddr*) &sa_in, sizeof(sa_in) ) < 0 )
-        {
-	perror( "bind" );
+    if ( bind(listen_fd, (struct sockaddr*) &sa_in, sizeof(sa_in) ) < 0 )
+    {
+        perror( "bind" );
         exit( 1 );
-        }
+    }
 
     /* Start a listen going. */
     if ( listen( listen_fd, 1024 ) < 0 )
-        {
-	perror( "listen" );
+    {
+        perror( "listen" );
         exit( 1 );
-        }
+    }
 
     return listen_fd;
-    }
+}

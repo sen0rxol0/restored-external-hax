@@ -14,6 +14,26 @@
 
 IOUSBDeviceDescriptionRef IOUSBDeviceDescriptionCreateWithType(CFAllocatorRef, CFStringRef);
 
+io_service_t get_service(const char *name, unsigned int retry)
+{
+	io_service_t service;
+	CFDictionaryRef match = IOServiceMatching(name);
+
+  for (i = 0; i < retry; i++) {
+      CFRetain(match);
+      service = IOServiceGetMatchingService(kIOMasterPortDefault, match);
+      if (!service) {
+          printf("Didn't find, trying again\n");
+          sleep(1);
+      } else {
+          break;
+      }
+  }
+
+	CFRelease(match);
+	return service;
+}
+
 /* reversed from restored_external */
 int
 init_mux(void)
@@ -21,7 +41,6 @@ init_mux(void)
     int i;
     CFNumberRef n;
     CFMutableDictionaryRef dict;
-    CFMutableDictionaryRef match;
     IOUSBDeviceDescriptionRef desc;
     IOUSBDeviceControllerRef controller;
     io_service_t service;
@@ -49,17 +68,8 @@ init_mux(void)
     CFDictionarySetValue(dict, CFSTR("DebugLevel"), n);
     CFRelease(n);
 
-    match = IOServiceMatching("AppleUSBDeviceMux");
-    for (i = 0; i < 3; i++) {
-        CFRetain(match);
-        service = IOServiceGetMatchingService(kIOMasterPortDefault, match);
-        if (!service) {
-            printf("Didn't find, trying again\n");
-            sleep(1);
-        } else {
-            break;
-        }
-    }
+    service = get_service("AppleUSBDeviceMux", 3);
+
     if (!service) {
         return -1;
     }
@@ -74,35 +84,34 @@ init_mux(void)
 void
 disable_watchdog()
 {
-  CFMutableDictionaryRef matching;
-  io_service_t service = 0;
-  matching = IOServiceMatching("IOWatchDogTimer");
-  if (matching == NULL) {
-      printf("unable to create matching dictionary for class IOWatchDogTimer\n");
+  io_service_t service = get_service("IOWatchDogTimer", 3);
+
+  if (service) {
+    uint32_t zero = 0;
+    CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zero);
+    IORegistryEntrySetCFProperties(service, n);
+    IOObjectRelease(service);
+  } else {
+    printf("unable to create matching dictionary for class IOWatchDogTimer\n");
   }
-  service = IOServiceGetMatchingService(kIOMasterPortDefault, matching);
-  if (service == 0) {
-      printf("unable to create matching dictionary for class IOWatchDogTimer\n");
-  }
-  uint32_t zero = 0;
-  CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zero);
-  IORegistryEntrySetCFProperties(service, n);
-  IOObjectRelease(service);
 }
 
 int
 main(int argc, char *argv[])
 {
 
+    disable_watchdog();
+
     if (init_mux()) {
         printf("USB init FAIL\n");
     } else {
         printf("USB init succeeded, continuing ...\n");
     }
+
     sleep(1);
     printf("\n\t\t\t\t\tStarted  H A K E\n");
     printf("\t\tCredits: @xerub, @daytonhasty\n");
-    printf("\t\tMod by: @sen0rxol0\n");
+    printf("\t\tModded by: @sen0rxol0\n");
     printf("\n\tCompiled: " __DATE__ " " __TIME__ "\n\n");
     sleep(5);
     printf(" #######  ##    ##\n");
@@ -115,5 +124,7 @@ main(int argc, char *argv[])
     printf("\nConnect with an SSH tunnel on port 22\n\n");
     sleep(3);
     char *execve_params[] = { "micro_inetd", "22", "/sbin/sshd", "-i", NULL };
+    // char *execve_params[] = { "micro_inetd", "22", "/usr/local/bin/dropbear", "-i", NULL };
+    // char *execve_params[] = { "micro_inetd", "22", "/bin/bash", "-c", "/usr/local/bin/dropbear -i", NULL };
     return main2(4, execve_params);
 }

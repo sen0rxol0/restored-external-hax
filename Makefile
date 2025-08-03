@@ -1,13 +1,21 @@
-CC       = xcrun -sdk iphoneos clang
-CC_FLAGS = -arch arm64 -O3 -fvisibility=hidden -fvisibility-inlines-hidden $(CFLAGS)
-LD_FLAGS = -framework CoreFoundation -framework IOKit -miphoneos-version-min=12.0 $(LDFLAGS)
-STRIP    = xcrun -sdk iphoneos strip
+CC = xcrun -sdk iphoneos clang
+STRIP = xcrun -sdk iphoneos strip
+LDFLAGS = -framework CoreFoundation -framework IOKit
+32_LDFLAGS = $(LDFLAGS)
+32_LDFLAGS += -miphoneos-version-min=6.0
+LDFLAGS += -miphoneos-version-min=11.0
 
 .PHONY: clean
 
 restored_external: src/restored_external_hax.c
-	$(CC) $(CC_FLAGS) $^ $(LD_FLAGS) -o $@
+	$(CC) -arch arm64 -Wall $^ $(LDFLAGS) -o $@
 	$(STRIP) $@
+	@ldid -Srestored_external.plist restored_external
+
+restored_external_32: src/restored_external_hax.c
+	$(CC) -arch armv7 -Wall $^ $(32_LDFLAGS) -o $@
+	$(STRIP) $@
+	# @ldid -Srestored_external.plist restored_external_32
 
 clean:
-	rm -rf *.o *.dSYM restored_external
+	rm restored_external

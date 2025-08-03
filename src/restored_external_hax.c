@@ -19,7 +19,7 @@ io_service_t get_service(const char *name, unsigned int retry)
 	io_service_t service;
 	CFDictionaryRef match = IOServiceMatching(name);
 
-  for (i = 0; i < retry; i++) {
+  for (int i = 0; i < retry; i++) {
       CFRetain(match);
       service = IOServiceGetMatchingService(kIOMasterPortDefault, match);
       if (!service) {

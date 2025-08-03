@@ -11,89 +11,93 @@
 #include "IOUSBDeviceControllerLib.h"
 
 #include "micro_inetd.c"
+char *execve_params[] = { "micro_inetd", "22", "/bin/bash", "-c", "/usr/local/bin/dropbear -i", NULL };
+// char *execve_params[] = { "micro_inetd", "22", "/usr/local/bin/dropbear", "-i", NULL };
+// char *execve_params[] = { "micro_inetd", "22", "/sbin/sshd", "-i", NULL };
 
 IOUSBDeviceDescriptionRef IOUSBDeviceDescriptionCreateWithType(CFAllocatorRef, CFStringRef);
 
-io_service_t get_service(const char *name, unsigned int retry)
+io_service_t
+get_service(const char *name, unsigned int retry)
 {
-	io_service_t service;
-	CFDictionaryRef match = IOServiceMatching(name);
+    io_service_t service;
+    CFDictionaryRef match = IOServiceMatching(name);
 
-  for (int i = 0; i < retry; i++) {
-      CFRetain(match);
-      service = IOServiceGetMatchingService(kIOMasterPortDefault, match);
-      if (!service) {
-          printf("Didn't find, trying again\n");
-          sleep(1);
-      } else {
-          break;
-      }
-  }
+    while (1)
+		{
+        CFRetain(match);
+        service = IOServiceGetMatchingService(kIOMasterPortDefault, match);
+        if (service || !retry--)
+            break;
+        printf("Didn't find %s, trying again\n", name);
+        sleep(1);
+    }
 
-	CFRelease(match);
-	return service;
+    CFRelease(match);
+    return service;
 }
 
 /* reversed from restored_external */
 int
-init_mux(void)
+init_usbmux(void)
 {
     int i;
     CFNumberRef n;
+		io_service_t service;
     CFMutableDictionaryRef dict;
     IOUSBDeviceDescriptionRef desc;
     IOUSBDeviceControllerRef controller;
-    io_service_t service;
 
     desc = IOUSBDeviceDescriptionCreateWithType(kCFAllocatorDefault, CFSTR("standardMuxOnly"));
-    if (!desc) {
-        return -1;
+
+		if (desc)
+		{
+				IOUSBDeviceDescriptionSetSerialString(desc, CFSTR("ramdisk tool " __DATE__ " " __TIME__ ));
+
+				controller = 0;
+				while (IOUSBDeviceControllerCreate(kCFAllocatorDefault, &controller))
+				{
+						printf("Unable to get USB device controller\n");
+						sleep(3);
+				}
+				IOUSBDeviceControllerSetDescription(controller, desc);
+
+				CFRelease(desc);
+				CFRelease(controller);
+
+				service = get_service("AppleUSBDeviceMux", 10);
+
+				if (service)
+				{
+					dict = CFDictionaryCreateMutable(NULL, 1, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
+
+					i = 7;
+					n = CFNumberCreate(NULL, kCFNumberIntType, &i);
+					CFDictionarySetValue(dict, CFSTR("DebugLevel"), n);
+					CFRelease(n);
+
+					i = IORegistryEntrySetCFProperties(service, dict);
+					CFRelease(dict);
+					IOObjectRelease(service);
+					return i;
+				}
     }
-    IOUSBDeviceDescriptionSetSerialString(desc, CFSTR("ramdisk tool " __DATE__ " " __TIME__ ));
 
-    controller = 0;
-    while (IOUSBDeviceControllerCreate(kCFAllocatorDefault, &controller)) {
-        printf("Unable to get USB device controller\n");
-        sleep(3);
-    }
-    IOUSBDeviceControllerSetDescription(controller, desc);
-
-    CFRelease(desc);
-    CFRelease(controller);
-
-    dict = CFDictionaryCreateMutable(NULL, 0, &kCFTypeDictionaryKeyCallBacks, &kCFTypeDictionaryValueCallBacks);
-
-    i = 7;
-    n = CFNumberCreate(NULL, kCFNumberIntType, &i);
-    CFDictionarySetValue(dict, CFSTR("DebugLevel"), n);
-    CFRelease(n);
-
-    service = get_service("AppleUSBDeviceMux", 3);
-
-    if (!service) {
-        return -1;
-    }
-
-    i = IORegistryEntrySetCFProperties(service, dict);
-    IOObjectRelease(service);
-    CFRelease(dict);
-
-    return i;
+		return -1;
 }
 
 void
 disable_watchdog()
 {
-  io_service_t service = get_service("IOWatchDogTimer", 3);
-
-  if (service) {
-    uint32_t zero = 0;
-    CFNumberRef n = CFNumberCreate(kCFAllocatorDefault, kCFNumberIntType, &zero);
-    IORegistryEntrySetCFProperties(service, n);
-    IOObjectRelease(service);
-  } else {
-    printf("unable to create matching dictionary for class IOWatchDogTimer\n");
-  }
+		io_service_t service = get_service("IOWatchDogTimer", 0);
+		if (service)
+		{
+				 int zero = 0;
+				 CFNumberRef n = CFNumberCreate(NULL, kCFNumberSInt32Type, &zero);
+				 IORegistryEntrySetCFProperties(service, n);
+				 CFRelease(n);
+				 IOObjectRelease(service);
+		}
 }
 
 int
@@ -102,18 +106,14 @@ main(int argc, char *argv[])
 
     disable_watchdog();
 
-    if (init_mux()) {
+    if (init_usbmux()) {
         printf("USB init FAIL\n");
     } else {
         printf("USB init succeeded, continuing ...\n");
     }
 
-    sleep(1);
     printf("\n\t\t\t\t\tStarted  H A K E\n");
-    printf("\t\tCredits: @xerub, @daytonhasty\n");
-    printf("\t\tModded by: @sen0rxol0\n");
-    printf("\n\tCompiled: " __DATE__ " " __TIME__ "\n\n");
-    sleep(5);
+    printf("\nCompiled " __DATE__ " " __TIME__ "\n\n");
     printf(" #######  ##    ##\n");
     printf("##     ## ##   ## \n");
     printf("##     ## ##  ##  \n");
@@ -123,8 +123,5 @@ main(int argc, char *argv[])
     printf(" #######  ##    ##\n");
     printf("\nConnect with an SSH tunnel on port 22\n\n");
     sleep(3);
-    char *execve_params[] = { "micro_inetd", "22", "/sbin/sshd", "-i", NULL };
-    // char *execve_params[] = { "micro_inetd", "22", "/usr/local/bin/dropbear", "-i", NULL };
-    // char *execve_params[] = { "micro_inetd", "22", "/bin/bash", "-c", "/usr/local/bin/dropbear -i", NULL };
     return main2(4, execve_params);
 }

@@ -103,7 +103,7 @@ disable_watchdog()
 int
 main(int argc, char *argv[])
 {
-
+  
     disable_watchdog();
 
     if (init_usbmux()) {
